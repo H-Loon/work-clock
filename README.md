@@ -1,10 +1,11 @@
 ﻿# work-clock
 
-Compte le temps que Claude travaille, par jour et par chat, et l'affiche dans un tableau de bord à côté du chat.
+Compte le temps que Claude travaille, par jour et par chat, et l'affiche au-dessus de la saisie et dans un tableau de bord à côté du chat.
 
-- Le tableau affiche le total du jour par chat, avec des barres, puis les 7 derniers jours.
-- Une petite animation de Claude en pixels montre s'il travaille ou se repose.
-- La commande `/work-clock` ouvre le tableau et donne le total du jour.
+- Au-dessus de la saisie, un widget résume la journée du chat en cours : son nom, son temps aujourd'hui, le total de la journée, le nombre de tours et le plus long. Un petit Claude animé danse sur une tuile orange à vagues, plus agitées quand Claude travaille.
+- Le bouton « Tableau ↗ » du widget, ou la commande `/work-clock`, ouvre le tableau de bord : le jour, la semaine en barres (un clic sur un jour montre ses chats), la série, le record et la moyenne.
+- Les chats portent le nom que leur donne l'app, lu dans leur transcript.
+- `/work-clock cacher` masque le widget, `/work-clock afficher` le remet.
 
 ## Installation
 
@@ -28,5 +29,5 @@ Dans l'app de bureau, où `/plugin` ne fonctionne pas : cliquez sur + à côté 
 
 - Seuls les tours de l'agent principal sont comptés ; les sous-agents ne le sont pas.
 - Un tour qui passe minuit compte pour le jour où il a commencé.
-- Les données sont dans le magasin du mod, partagé entre les sessions.
-
+- Les données sont dans le magasin du mod, partagé entre les sessions, et ne quittent pas l'ordinateur.
+- Pour lire le nom d'un chat, le mod lance `findstr` (Windows) ou `grep` sur son transcript dans `~/.claude/projects`.
