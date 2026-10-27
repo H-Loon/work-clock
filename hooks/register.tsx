@@ -309,16 +309,20 @@ export const register: Register = on => {
 
     // A press never leaves the SVG's frame, so the button lies over the room the drawing
     // keeps free at its right edge. The negative margins take back the padding of the frame
-    // the app draws around the band (about 10px across, more down), so the widget reaches its rim.
+    // the app draws around the band (about 10px each way), so the widget reaches its rim.
+    // The app zeroes the vertical margins of the band's root Box and of any only child under
+    // it; the root here has two children, so the drawing's own Box keeps its marginY.
     return (
-      <Box marginX={-1.3} marginY={-1}>
-        <Svg
-          source={bandSvg(width, band)}
-          alt={`${title} : ${band.chat} aujourd'hui dans ce chat, ${band.day} en tout. ${detail}`}
-          width={FLUID}
-          height={BAND_HEIGHT}
-          isInteractive
-        />
+      <Box marginX={-1.3}>
+        <Box width="100%" marginY={-0.5}>
+          <Svg
+            source={bandSvg(width, band)}
+            alt={`${title} : ${band.chat} aujourd'hui dans ce chat, ${band.day} en tout. ${detail}`}
+            width={FLUID}
+            height={BAND_HEIGHT}
+            isInteractive
+          />
+        </Box>
         <Box
           position="absolute"
           top={0}
