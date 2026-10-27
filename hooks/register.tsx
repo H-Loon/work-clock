@@ -308,9 +308,10 @@ export const register: Register = on => {
     const band = { mode, title, detail, chat: formatTime(chatMs), day: formatTime(dayMs), share: dayMs > 0 ? chatMs / dayMs : 0 }
 
     // A press never leaves the SVG's frame, so the button lies over the room the drawing
-    // keeps free at its right edge.
+    // keeps free at its right edge. The negative margins take back the padding of the frame
+    // the app draws around the band (about 10px), so the widget reaches its rim.
     return (
-      <Box>
+      <Box marginX={-1.3} marginY={-0.5}>
         <Svg
           source={bandSvg(width, band)}
           alt={`${title} : ${band.chat} aujourd'hui dans ce chat, ${band.day} en tout. ${detail}`}

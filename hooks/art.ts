@@ -171,7 +171,7 @@ const choppy = (scale: number): Layer[] => [
 ]
 
 // ── The band above the prompt: today in this chat ──────────────────────────
-// One card across the band: the mascot on its orange tile, the chat's title, and
+// Across the whole band: the mascot on its orange tile, the chat's title, and
 // on the right this chat's time today against the whole day's. The band's own
 // Button sits over the space kept free at the right edge.
 
@@ -260,8 +260,9 @@ export const bandSvg = (width: number, band: Band) => {
   return svg(
     h,
     `<defs>${MASCOT_DEFS}${surfaceDefs('tile')}</defs>` +
-      card('band', h) +
-      // A faint orange sea along the card's foot: slow at rest, choppy while Claude works.
+      // No card of its own: the app frames the band, and the drawing fills that frame to its rim.
+      `<clipPath id="band-card"><rect width="100%" height="${h}" rx="12"/></clipPath>` +
+      // A faint orange sea along the band's foot: slow at rest, choppy while Claude works.
       `<g clip-path="url(#band-card)" opacity="${working ? 0.2 : 0.12}">${waves(0, 22, h - 22, FLUID, working ? choppy(1.2) : calm(1.2), 90)}</g>` +
       surface('tile', TILE.x, TILE.y, TILE.size, TILE.size, 13, working ? choppy(1) : calm(1)) +
       mascot(BAND_DANCE[band.mode], '', 1.05) +
