@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "h-loon",
   "owner": { "name": "H-Loon" },
   "plugins": [{ "name": "work-clock", "source": "./" }]

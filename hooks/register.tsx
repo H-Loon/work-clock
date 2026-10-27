@@ -1,6 +1,6 @@
 import type { Engine, Register } from 'claude-code'
 
-import { BAND_BUTTON, BAND_HEIGHT, HERO_HEIGHT, WEEK_HEIGHT, bandSvg, chatsHeight, chatsSvg, heroSvg, weekSvg } from './art.ts'
+import { BAND_BUTTON, BAND_HEIGHT, FLUID, HERO_HEIGHT, WEEK_HEIGHT, bandSvg, chatsHeight, chatsSvg, heroSvg, weekSvg } from './art.ts'
 import type { BandMode, ChartDay } from './art.ts'
 
 // Totals are kept per local day: `day:YYYY-MM-DD` maps each session id to milliseconds,
@@ -314,7 +314,7 @@ export const register: Register = on => {
         <Svg
           source={bandSvg(width, band)}
           alt={`${title} : ${band.chat} aujourd'hui dans ce chat, ${band.day} en tout. ${detail}`}
-          width={width}
+          width={FLUID}
           height={BAND_HEIGHT}
           isInteractive
         />
@@ -425,8 +425,8 @@ export const register: Register = on => {
     }
 
     const { Box, Button, Svg, Text } = $.ui.resolve(e)
-    // One column of one width, centred: the drawings are sized in pixels, the rows in cells.
-    const width = Math.max(320, Math.min(760, Math.round(e.props.bodyColumns * CELL_PX)))
+    // One column across the pane: the drawings narrow to it; `width` estimates it, for what fits.
+    const width = Math.max(320, Math.round(e.props.bodyColumns * CELL_PX))
     const stats = [
       { label: 'Semaine', value: formatTime(weekMs) },
       { label: 'Série', value: `${streak} jour${streak > 1 ? 's' : ''}` },
@@ -435,52 +435,50 @@ export const register: Register = on => {
     ]
 
     return (
-      <Box flexDirection="column" alignItems="center">
-        <Box flexDirection="column" gap={1} width={Math.round(width / CELL_PX)}>
-          <Svg
-            source={heroSvg(width, formatTime(totalOf(today)), status, working, stats)}
-            alt={`Aujourd'hui ${formatTime(totalOf(today))}. ${summary}`}
-            width={width}
-            height={HERO_HEIGHT}
-            isInteractive
-          />
-          <Box flexDirection="row" justifyContent="space-between" alignItems="center" marginTop={1}>
-            <Button key="prev" plain dimColor label="‹" onPress={shift(1)} />
-            <Text bold>{range}</Text>
-            {weekOffset > 0 ? <Button key="next" plain dimColor label="›" onPress={shift(-1)} /> : <Text dimColor>›</Text>}
-          </Box>
-          <Box flexDirection="column">
-            <Svg source={weekSvg(width, chart, selected, shortTime)} alt={`Semaine du ${range}`} width={width} height={WEEK_HEIGHT} isInteractive />
-            {/* The day buttons are the chart's axis: one seventh of the width each, under their bar. */}
-            <Box flexDirection="row">
-              {week.map(day => (
-                <Box width={0} flexGrow={1} justifyContent="center">
-                  <Button
-                    key={`day-${day}`}
-                    plain
-                    dimColor={day !== selected}
-                    label={`${WEEKDAYS[dateOf(day).getDay()]} ${dateOf(day).getDate()}`}
-                    onPress={select(day)}
-                  />
-                </Box>
-              ))}
-            </Box>
-          </Box>
-          <Box flexDirection="row" justifyContent="space-between" marginTop={1}>
-            <Text bold>{longDate(selected)}</Text>
-            <Text bold color="claude">
-              {formatTime(totalOf(selected))}
-            </Text>
-          </Box>
-          <Svg
-            source={chatsSvg(width, chats.map(chat => ({ ...chat, label: fit(chat.label, Math.floor((width - 130) / 7.4)) })), formatTime)}
-            alt={chats.length === 0 ? 'Aucune activité ce jour-là' : chats.map(c => `${c.label} ${formatTime(c.ms)}`).join(', ')}
-            width={width}
-            height={chatsHeight(chats.length)}
-            isInteractive
-          />
-          <Text dimColor>Clique un jour pour voir ses chats · /work-clock cacher masque le widget</Text>
+      <Box flexDirection="column" gap={1}>
+        <Svg
+          source={heroSvg(width, formatTime(totalOf(today)), status, working, stats)}
+          alt={`Aujourd'hui ${formatTime(totalOf(today))}. ${summary}`}
+          width={FLUID}
+          height={HERO_HEIGHT}
+          isInteractive
+        />
+        <Box flexDirection="row" justifyContent="space-between" alignItems="center" marginTop={1}>
+          <Button key="prev" plain dimColor label="‹" onPress={shift(1)} />
+          <Text bold>{range}</Text>
+          {weekOffset > 0 ? <Button key="next" plain dimColor label="›" onPress={shift(-1)} /> : <Text dimColor>›</Text>}
         </Box>
+        <Box flexDirection="column">
+          <Svg source={weekSvg(width, chart, selected, shortTime)} alt={`Semaine du ${range}`} width={FLUID} height={WEEK_HEIGHT} isInteractive />
+          {/* The day buttons are the chart's axis: one seventh of the width each, under their bar. */}
+          <Box flexDirection="row">
+            {week.map(day => (
+              <Box width={0} flexGrow={1} justifyContent="center">
+                <Button
+                  key={`day-${day}`}
+                  plain
+                  dimColor={day !== selected}
+                  label={`${WEEKDAYS[dateOf(day).getDay()]} ${dateOf(day).getDate()}`}
+                  onPress={select(day)}
+                />
+              </Box>
+            ))}
+          </Box>
+        </Box>
+        <Box flexDirection="row" justifyContent="space-between" marginTop={1}>
+          <Text bold>{longDate(selected)}</Text>
+          <Text bold color="claude">
+            {formatTime(totalOf(selected))}
+          </Text>
+        </Box>
+        <Svg
+          source={chatsSvg(chats.map(chat => ({ ...chat, label: fit(chat.label, Math.floor((width - 130) / 7.4)) })), formatTime)}
+          alt={chats.length === 0 ? 'Aucune activité ce jour-là' : chats.map(c => `${c.label} ${formatTime(c.ms)}`).join(', ')}
+          width={FLUID}
+          height={chatsHeight(chats.length)}
+          isInteractive
+        />
+        <Text dimColor>Clique un jour pour voir ses chats · /work-clock cacher masque le widget</Text>
       </Box>
     )
   })

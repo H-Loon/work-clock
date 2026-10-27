@@ -5,6 +5,14 @@
 // The desktop draws an interactive Svg in a sandboxed frame of the size it is given,
 // and sets the app's font and text color on the root when the markup names none: so the
 // text here names no font, and neutral ink is `currentColor`, which follows the theme.
+//
+// Each drawing is fluid: asked at the widest size the frame takes, it is narrowed to its
+// slot, and the markup has no viewBox, so it lays out in percentages and px insets
+// (nested `<svg>` viewports and CSS `calc()` widths) and fills the slot at any width.
+// The `width` the functions take is an estimate, for what fits (chips, truncation).
+
+// The frame the app draws an Svg in narrows to its slot from here.
+export const FLUID = 4096
 
 export type ChartDay = { day: string; ms: number; isToday: boolean }
 
@@ -19,8 +27,25 @@ const EASE = '0.45 0 0.55 1'
 const escape = (text: string) =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-const svg = (width: number, height: number, body: string) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`
+const svg = (height: number, body: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${height}">${body}</svg>`
+
+// A viewport whose left edge is at `x` and as wide as `width` (percentages of the one around
+// it). Chrome reads these as attributes only: a `calc()` works on a rect's CSS width alone.
+const at = (x: string, body: string, width?: string) =>
+  `<svg x="${x}"${width === undefined ? '' : ` width="${width}"`} overflow="visible">${body}</svg>`
+
+// Content drawn in negative x from the right edge.
+const fromRight = (body: string) => at('100%', body)
+
+// A rect inset `left` px from the viewport's left and `right` px from its right.
+const span = (left: number, right: number, y: number, h: number, attrs: string, inner = '') =>
+  `<rect x="${left}" y="${y}" height="${h}" style="width:calc(100% - ${left + right}px)" ${attrs}>${inner}</rect>`
+
+// A card: a faint wash of the theme's ink, rounded, filling the width.
+const card = (id: string, h: number) =>
+  `<clipPath id="${id}-card"><rect width="100%" height="${h}" rx="14"/></clipPath>` +
+  `<rect width="100%" height="${h}" rx="14" fill="currentColor" fill-opacity=".045" stroke="currentColor" stroke-opacity=".09" stroke-width="2" clip-path="url(#${id}-card)"/>`
 
 // One SMIL track: values at keyTimes, eased between each pair.
 const track = (attribute: string, times: readonly number[], values: readonly string[], seconds: number) => {
@@ -38,7 +63,7 @@ const loop = (attribute: string, values: string[], seconds: number) =>
   track(attribute, values.map((_, i) => i / (values.length - 1)), values, seconds)
 
 // Grows an attribute from `from` once, as the drawing appears.
-const grow = (attribute: string, from: number, to: number) =>
+const grow = (attribute: string, from: number | string, to: number | string) =>
   `<animate attributeName="${attribute}" from="${from}" to="${to}" dur=".6s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0.2 0.8 0.3 1"/>`
 
 // ── The mascot ─────────────────────────────────────────────────────────────
@@ -121,11 +146,17 @@ const surfaceDefs = (id: string) =>
   `<linearGradient id="${id}-gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".3"/>` +
   `<stop offset=".55" stop-color="#fff" stop-opacity="0"/></linearGradient>`
 
-const surface = (id: string, x: number, y: number, w: number, h: number, r: number, layers: Layer[], period?: number) =>
-  `<clipPath id="${id}-clip"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}"/></clipPath>` +
-  `<g clip-path="url(#${id}-clip)"><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="url(#${id}-base)"/>` +
-  `${waves(x, y, h, w, layers, period)}<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="url(#${id}-gloss)"/></g>` +
-  `<rect x="${x + 0.5}" y="${y + 0.5}" width="${w - 1}" height="${h - 1}" rx="${r - 0.5}" fill="none" stroke="#fff" stroke-opacity=".22"/>`
+// `w` in px, or '100%' for the whole width; the rim is a 2px stroke the clip halves.
+const surface = (id: string, x: number, y: number, w: number | '100%', h: number, r: number, layers: Layer[], period?: number) => {
+  const box = `x="${x}" y="${y}" width="${w}" height="${h}"`
+
+  return (
+    `<clipPath id="${id}-clip"><rect ${box} rx="${r}"/></clipPath>` +
+    `<g clip-path="url(#${id}-clip)"><rect ${box} fill="url(#${id}-base)"/>` +
+    `${waves(x, y, h, w === '100%' ? FLUID : w, layers, period)}<rect ${box} fill="url(#${id}-gloss)"/>` +
+    `<rect ${box} rx="${r}" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="2"/></g>`
+  )
+}
 
 // Slow deep swells at rest, a choppier sea while Claude works.
 const calm = (scale: number): Layer[] => [
@@ -203,34 +234,35 @@ export const bandSvg = (width: number, band: Band) => {
   // Stat blocks from the right, as many as the width allows.
   const blocks = width >= 560 ? 2 : width >= 400 ? 1 : 0
   const blockW = 92
-  const statsX = width - BAND_BUTTON - blocks * blockW
+  // The stats hang from the right edge: x counts back from it.
+  const statsX = -BAND_BUTTON - blocks * blockW
   const textX = TILE.x + TILE.size + 14
   const stat = (x: number, label: string, value: string, color: string) =>
     `<text x="${x}" y="25" font-size="9.5" font-weight="700" letter-spacing="1" fill="currentColor" opacity=".55">${escape(label)}</text>` +
     `<text x="${x}" y="45" font-size="17" font-weight="700" fill="${color}">${escape(value)}</text>`
   const shareW = blocks * blockW - 16
+  const shareOn = Math.max(3.5, shareW * Math.min(1, band.share))
   const stats =
     blocks === 0
       ? ''
-      : `<line x1="${statsX - 14.5}" y1="14" x2="${statsX - 14.5}" y2="${h - 14}" stroke="currentColor" stroke-opacity=".12"/>` +
-        stat(statsX, 'CE CHAT', band.chat, ACCENT_DEEP) +
-        (blocks === 2 ? stat(statsX + blockW, "AUJOURD'HUI", band.day, 'currentColor') : '') +
-        `<rect x="${statsX}" y="52" width="${shareW}" height="3.5" rx="1.75" fill="currentColor" fill-opacity=".1"/>` +
-        `<rect x="${statsX}" y="52" width="${Math.max(3.5, shareW * Math.min(1, band.share))}" height="3.5" rx="1.75" fill="${ACCENT}">` +
-        `${grow('width', 0, Math.max(3.5, shareW * Math.min(1, band.share)))}</rect>`
-  const room = (blocks === 0 ? width - BAND_BUTTON : statsX - 14) - textX - 12
+      : fromRight(
+          `<line x1="${statsX - 14.5}" y1="14" x2="${statsX - 14.5}" y2="${h - 14}" stroke="currentColor" stroke-opacity=".12"/>` +
+            stat(statsX, 'CE CHAT', band.chat, ACCENT_DEEP) +
+            (blocks === 2 ? stat(statsX + blockW, "AUJOURD'HUI", band.day, 'currentColor') : '') +
+            `<rect x="${statsX}" y="52" width="${shareW}" height="3.5" rx="1.75" fill="currentColor" fill-opacity=".1"/>` +
+            `<rect x="${statsX}" y="52" width="${shareOn}" height="3.5" rx="1.75" fill="${ACCENT}">${grow('width', 0, shareOn)}</rect>`,
+        )
+  const room = width + (blocks === 0 ? -BAND_BUTTON : statsX - 14) - textX - 12
   const dot = working
     ? `<circle cx="${textX + 3}" cy="${42}" r="3" fill="${ACCENT}">${loop('opacity', ['1', '.3', '1'], 1.2)}</circle>`
     : ''
 
   return svg(
-    width,
     h,
-    `<defs>${MASCOT_DEFS}${surfaceDefs('tile')}` +
-      `<clipPath id="band-clip"><rect x="0.5" y="0.5" width="${width - 1}" height="${h - 1}" rx="14"/></clipPath></defs>` +
-      card(0.5, 0.5, width - 1, h - 1) +
+    `<defs>${MASCOT_DEFS}${surfaceDefs('tile')}</defs>` +
+      card('band', h) +
       // A faint orange sea along the card's foot: slow at rest, choppy while Claude works.
-      `<g clip-path="url(#band-clip)" opacity="${working ? 0.2 : 0.12}">${waves(0, 22, h - 22, width, working ? choppy(1.2) : calm(1.2), 90)}</g>` +
+      `<g clip-path="url(#band-card)" opacity="${working ? 0.2 : 0.12}">${waves(0, 22, h - 22, FLUID, working ? choppy(1.2) : calm(1.2), 90)}</g>` +
       surface('tile', TILE.x, TILE.y, TILE.size, TILE.size, 13, working ? choppy(1) : calm(1)) +
       mascot(BAND_DANCE[band.mode], '', 1.05) +
       `<text x="${textX}" y="28" font-size="13.5" font-weight="650" fill="currentColor">${escape(fit(band.title, room, 7.6))}</text>` +
@@ -241,122 +273,127 @@ export const bandSvg = (width: number, band: Band) => {
 }
 
 // ── The dashboard ──────────────────────────────────────────────────────────
-// Cards share one look: a faint wash of the theme's ink, rounded, on any background.
-
-const card = (x: number, y: number, w: number, h: number) =>
-  `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14" fill="currentColor" fill-opacity=".045" stroke="currentColor" stroke-opacity=".09"/>`
+// Cards share one look (`card`): a faint wash of the theme's ink, rounded, on any background.
 
 export const HERO_HEIGHT = 176
 
 export const heroSvg = (width: number, total: string, status: string, working: boolean, stats: Stat[]) => {
   const h = HERO_HEIGHT
+  // The mascot dances at the right edge: its spot counts back from it.
   const hero: Choreography = {
     seconds: 12,
-    orbit: [[0, `${width - 64} 72`], [1, `${width - 64} 72`]],
+    orbit: [[0, '-64 72'], [1, '-64 72']],
     hop: [[0, 0], [0.7, 0], [0.74, -8], [0.78, 0], [0.82, -8], [0.86, 0], [1, 0]],
     wiggle: [[0, 0], [0.7, 0], [0.73, -12], [0.76, 12], [0.79, -12], [0.82, 12], [0.85, 0], [1, 0]],
     wave: [[0, 0], [0.25, 0], [0.28, -70], [0.31, -25], [0.34, -70], [0.37, 0], [1, 0]],
     look: [[0, '0 0'], [0.45, '0 -1.3'], [0.5, '-1.3 -1.3'], [0.55, '1.3 -1.3'], [0.6, '0 0'], [1, '0 0']],
     bob: working ? 0.7 : 1.4,
   }
-  // Stat chips along the bottom: as many as fit, each the same width.
+  // Stat chips along the bottom, as many as fit, sharing the row: each a slot of the
+  // width, 8px apart and 12px in from the card's edges.
   const shown = stats.slice(0, Math.max(2, Math.min(stats.length, Math.floor((width - 24) / 120))))
-  const chipW = (width - 24 - (shown.length - 1) * 8) / shown.length
+  const slot = 100 / shown.length
   const chips = shown
     .map((s, i) => {
-      const x = 12 + i * (chipW + 8)
+      const left = i === 0 ? 12 : 4
+      const right = i === shown.length - 1 ? 12 : 4
 
-      return (
-        `<rect x="${x}" y="${h - 52}" width="${chipW}" height="40" rx="10" fill="#fff" fill-opacity=".16"/>` +
-        `<text x="${x + 12}" y="${h - 36}" font-size="10" font-weight="600" fill="#fff" opacity=".8">${escape(s.label.toUpperCase())}</text>` +
-        `<text x="${x + 12}" y="${h - 19}" font-size="13.5" font-weight="700" fill="#fff">${escape(s.value)}</text>`
+      return at(
+        `${i * slot}%`,
+        span(left, right, h - 52, 40, 'rx="10" fill="#fff" fill-opacity=".16"') +
+          `<text x="${left + 12}" y="${h - 36}" font-size="10" font-weight="600" fill="#fff" opacity=".8">${escape(s.label.toUpperCase())}</text>` +
+          `<text x="${left + 12}" y="${h - 19}" font-size="13.5" font-weight="700" fill="#fff">${escape(s.value)}</text>`,
+        `${slot}%`,
       )
     })
     .join('')
 
   return svg(
-    width,
     h,
     `<defs>${MASCOT_DEFS}${surfaceDefs('hero')}</defs>` +
-      surface('hero', 0, 0, width, h, 18, working ? choppy(1.8) : calm(1.8), 90) +
+      surface('hero', 0, 0, '100%', h, 18, working ? choppy(1.8) : calm(1.8), 90) +
       `<text x="20" y="30" font-size="10.5" font-weight="700" letter-spacing="1.2" fill="#fff" opacity=".85">AUJOURD'HUI</text>` +
       `<text x="19" y="70" font-size="36" font-weight="700" fill="#fff">${escape(total)}</text>` +
-      `<circle cx="${width - 120}" cy="26" r="3.5" fill="#fff">${working ? loop('opacity', ['1', '.3', '1'], 1.2) : ''}</circle>` +
-      `<text x="${width - 110}" y="30" font-size="11.5" font-weight="600" fill="#fff">${escape(status)}</text>` +
-      chips +
-      mascot(hero, '', 2),
+      fromRight(
+        `<circle cx="-120" cy="26" r="3.5" fill="#fff">${working ? loop('opacity', ['1', '.3', '1'], 1.2) : ''}</circle>` +
+          `<text x="-110" y="30" font-size="11.5" font-weight="600" fill="#fff">${escape(status)}</text>` +
+          mascot(hero, '', 2),
+      ) +
+      chips,
   )
 }
 
 export const WEEK_HEIGHT = 156
 
-// The week's bars; the day buttons drawn under it are its axis, one per seventh of the width.
+// The week's bars, one per seventh of the width; the day buttons drawn under it are its axis.
 export const weekSvg = (width: number, days: ChartDay[], selected: string, time: (ms: number) => string) => {
   const h = WEEK_HEIGHT
   const base = h - 14
   const tall = h - 52
-  const slot = width / days.length
+  const slot = 100 / days.length
+  const bw = Math.min(34, (width / days.length) * 0.46)
   const max = Math.max(1, ...days.map(d => d.ms))
   const bars = days
     .map((d, i) => {
-      const cx = slot * (i + 0.5)
-      const bw = Math.min(34, slot * 0.46)
       const bh = d.ms > 0 ? Math.max(6, (d.ms / max) * tall) : 3
       const on = d.day === selected
       const fill = on ? 'url(#bar-on)' : d.ms === 0 ? 'currentColor' : d.isToday ? '#eaa486' : ACCENT
       const opacity = on ? 1 : d.ms === 0 ? 0.12 : d.isToday ? 0.9 : 0.42
 
       return (
-        (on ? `<rect x="${cx - slot / 2 + 4}" y="8" width="${slot - 8}" height="${h - 16}" rx="12" fill="${ACCENT}" fill-opacity=".1"/>` : '') +
-        `<rect x="${cx - bw / 2}" y="${base - bh}" width="${bw}" height="${bh}" rx="${Math.min(8, bw / 3)}" fill="${fill}" fill-opacity="${opacity}">` +
-        `${grow('height', 0, bh)}${grow('y', base, base - bh)}</rect>` +
-        (d.ms > 0
-          ? `<text x="${cx}" y="${base - bh - 8}" text-anchor="middle" font-size="10.5" font-weight="${on ? 700 : 500}" fill="${on ? ACCENT_DEEP : 'currentColor'}" opacity="${on ? 1 : 0.6}">${escape(time(d.ms))}</text>`
-          : '') +
-        (d.isToday ? `<circle cx="${cx}" cy="${base + 8}" r="2.2" fill="${ACCENT}"/>` : '')
+        (on ? at(`${i * slot}%`, span(4, 4, 8, h - 16, `rx="12" fill="${ACCENT}" fill-opacity=".1"`), `${slot}%`) : '') +
+        // Drawn around the slot's middle.
+        at(
+          `${(i + 0.5) * slot}%`,
+          `<rect x="${-bw / 2}" y="${base - bh}" width="${bw}" height="${bh}" rx="${Math.min(8, bw / 3)}" fill="${fill}" fill-opacity="${opacity}">` +
+            `${grow('height', 0, bh)}${grow('y', base, base - bh)}</rect>` +
+            (d.ms > 0
+              ? `<text x="0" y="${base - bh - 8}" text-anchor="middle" font-size="10.5" font-weight="${on ? 700 : 500}" fill="${on ? ACCENT_DEEP : 'currentColor'}" opacity="${on ? 1 : 0.6}">${escape(time(d.ms))}</text>`
+              : '') +
+            (d.isToday ? `<circle cx="0" cy="${base + 8}" r="2.2" fill="${ACCENT}"/>` : ''),
+        )
       )
     })
     .join('')
 
   return svg(
-    width,
     h,
     `<defs><linearGradient id="bar-on" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e98f69"/><stop offset="1" stop-color="${ACCENT_DEEP}"/></linearGradient></defs>` +
-      card(0.5, 0.5, width - 1, h - 1) +
-      `<line x1="14" y1="${base + 0.5}" x2="${width - 14}" y2="${base + 0.5}" stroke="currentColor" stroke-opacity=".12"/>` +
+      card('week', h) +
+      span(14, 14, base, 1, 'fill="currentColor" fill-opacity=".12"') +
       bars,
   )
 }
 
 export const chatsHeight = (rows: number) => Math.max(1, rows) * 46 + 16
 
-export const chatsSvg = (width: number, rows: ChatRow[], time: (ms: number) => string) => {
+export const chatsSvg = (rows: ChatRow[], time: (ms: number) => string) => {
   const h = chatsHeight(rows.length)
   const max = Math.max(1, ...rows.map(r => r.ms))
-  const full = width - 36
   const body =
     rows.length === 0
-      ? `<text x="${width / 2}" y="${h / 2 + 4}" text-anchor="middle" font-size="12.5" fill="currentColor" opacity=".55">Aucune activité ce jour-là</text>`
+      ? `<text x="50%" y="${h / 2 + 4}" text-anchor="middle" font-size="12.5" fill="currentColor" opacity=".55">Aucune activité ce jour-là</text>`
       : rows
           .map((r, i) => {
             const y = 14 + i * 46
-            const bw = Math.max(5, (r.ms / max) * full)
+            const share = Math.max(0.01, r.ms / max).toFixed(4)
 
             return (
               `<text x="18" y="${y + 14}" font-size="13" font-weight="600" fill="currentColor">${escape(r.label)}` +
               `<tspan dx="7" font-size="10.5" font-weight="400" opacity=".5">${escape(r.code)}</tspan></text>` +
-              `<text x="${width - 18}" y="${y + 14}" text-anchor="end" font-size="12.5" font-weight="700" fill="${ACCENT_DEEP}">${escape(time(r.ms))}</text>` +
-              `<rect x="18" y="${y + 23}" width="${full}" height="6" rx="3" fill="currentColor" fill-opacity=".08"/>` +
-              `<rect x="18" y="${y + 23}" width="${bw}" height="6" rx="3" fill="url(#chat-bar)">${grow('width', 0, bw)}</rect>`
+              fromRight(`<text x="-18" y="${y + 14}" text-anchor="end" font-size="12.5" font-weight="700" fill="${ACCENT_DEEP}">${escape(time(r.ms))}</text>`) +
+              span(18, 18, y + 23, 6, 'rx="3" fill="currentColor" fill-opacity=".08"') +
+              // Its share of the track, grown from the left as the drawing appears.
+              `<g transform="translate(18 0)"><g><animateTransform attributeName="transform" type="scale" from="0 1" to="1 1" dur=".6s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0.2 0.8 0.3 1"/>` +
+              `<rect y="${y + 23}" height="6" rx="3" fill="url(#chat-bar)" style="width:calc((100% - 36px) * ${share})"/></g></g>`
             )
           })
           .join('')
 
   return svg(
-    width,
     h,
     `<defs><linearGradient id="chat-bar" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${ACCENT_DEEP}"/><stop offset="1" stop-color="#ea956d"/></linearGradient></defs>` +
-      card(0.5, 0.5, width - 1, h - 1) +
+      card('chats', h) +
       body,
   )
 }

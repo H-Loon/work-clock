@@ -1,4 +1,4 @@
-﻿# work-clock
+# work-clock
 
 Compte le temps que Claude travaille, par jour et par chat, et l'affiche au-dessus de la saisie et dans un tableau de bord à côté du chat.
 
