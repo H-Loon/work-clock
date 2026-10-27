@@ -1,5 +1,5 @@
 {
   "name": "work-clock",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Compte le temps que Claude travaille, par jour et par chat, dans un tableau de bord."
 }

@@ -186,11 +186,11 @@ export type Band = {
   share: number
 }
 
-export const BAND_HEIGHT = 64
+export const BAND_HEIGHT = 56
 // The room kept at the right edge for the button the band lays over the drawing.
 export const BAND_BUTTON = 112
 
-const TILE = { x: 10, y: 9, size: 46 }
+const TILE = { x: 10, y: 5, size: 46 }
 const SPOT = `${TILE.x + TILE.size / 2} ${TILE.y + 25}`
 
 const BAND_DANCE: Record<BandMode, Choreography> = {
@@ -238,23 +238,23 @@ export const bandSvg = (width: number, band: Band) => {
   const statsX = -BAND_BUTTON - blocks * blockW
   const textX = TILE.x + TILE.size + 14
   const stat = (x: number, label: string, value: string, color: string) =>
-    `<text x="${x}" y="25" font-size="9.5" font-weight="700" letter-spacing="1" fill="currentColor" opacity=".55">${escape(label)}</text>` +
-    `<text x="${x}" y="45" font-size="17" font-weight="700" fill="${color}">${escape(value)}</text>`
+    `<text x="${x}" y="21" font-size="9.5" font-weight="700" letter-spacing="1" fill="currentColor" opacity=".55">${escape(label)}</text>` +
+    `<text x="${x}" y="41" font-size="17" font-weight="700" fill="${color}">${escape(value)}</text>`
   const shareW = blocks * blockW - 16
   const shareOn = Math.max(3.5, shareW * Math.min(1, band.share))
   const stats =
     blocks === 0
       ? ''
       : fromRight(
-          `<line x1="${statsX - 14.5}" y1="14" x2="${statsX - 14.5}" y2="${h - 14}" stroke="currentColor" stroke-opacity=".12"/>` +
+          `<line x1="${statsX - 14.5}" y1="10" x2="${statsX - 14.5}" y2="${h - 10}" stroke="currentColor" stroke-opacity=".12"/>` +
             stat(statsX, 'CE CHAT', band.chat, ACCENT_DEEP) +
             (blocks === 2 ? stat(statsX + blockW, "AUJOURD'HUI", band.day, 'currentColor') : '') +
-            `<rect x="${statsX}" y="52" width="${shareW}" height="3.5" rx="1.75" fill="currentColor" fill-opacity=".1"/>` +
-            `<rect x="${statsX}" y="52" width="${shareOn}" height="3.5" rx="1.75" fill="${ACCENT}">${grow('width', 0, shareOn)}</rect>`,
+            `<rect x="${statsX}" y="48" width="${shareW}" height="3.5" rx="1.75" fill="currentColor" fill-opacity=".1"/>` +
+            `<rect x="${statsX}" y="48" width="${shareOn}" height="3.5" rx="1.75" fill="${ACCENT}">${grow('width', 0, shareOn)}</rect>`,
         )
   const room = width + (blocks === 0 ? -BAND_BUTTON : statsX - 14) - textX - 12
   const dot = working
-    ? `<circle cx="${textX + 3}" cy="${42}" r="3" fill="${ACCENT}">${loop('opacity', ['1', '.3', '1'], 1.2)}</circle>`
+    ? `<circle cx="${textX + 3}" cy="38" r="3" fill="${ACCENT}">${loop('opacity', ['1', '.3', '1'], 1.2)}</circle>`
     : ''
 
   return svg(
@@ -263,12 +263,12 @@ export const bandSvg = (width: number, band: Band) => {
       // No card of its own: the app frames the band, and the drawing fills that frame to its rim.
       `<clipPath id="band-card"><rect width="100%" height="${h}" rx="12"/></clipPath>` +
       // A faint orange sea along the band's foot: slow at rest, choppy while Claude works.
-      `<g clip-path="url(#band-card)" opacity="${working ? 0.2 : 0.12}">${waves(0, 22, h - 22, FLUID, working ? choppy(1.2) : calm(1.2), 90)}</g>` +
+      `<g clip-path="url(#band-card)" opacity="${working ? 0.2 : 0.12}">${waves(0, 18, h - 18, FLUID, working ? choppy(1.2) : calm(1.2), 90)}</g>` +
       surface('tile', TILE.x, TILE.y, TILE.size, TILE.size, 13, working ? choppy(1) : calm(1)) +
       mascot(BAND_DANCE[band.mode], '', 1.05) +
-      `<text x="${textX}" y="28" font-size="13.5" font-weight="650" fill="currentColor">${escape(fit(band.title, room, 7.6))}</text>` +
+      `<text x="${textX}" y="24" font-size="13.5" font-weight="650" fill="currentColor">${escape(fit(band.title, room, 7.6))}</text>` +
       dot +
-      `<text x="${textX + (working ? 11 : 0)}" y="46" font-size="11.5" fill="currentColor" opacity=".6">${escape(fit(band.detail, room - (working ? 11 : 0), 6.4))}</text>` +
+      `<text x="${textX + (working ? 11 : 0)}" y="42" font-size="11.5" fill="currentColor" opacity=".6">${escape(fit(band.detail, room - (working ? 11 : 0), 6.4))}</text>` +
       stats,
   )
 }
