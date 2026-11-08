@@ -104,10 +104,79 @@ const findTitle = async ($: Engine, sessionId: string) => {
   return undefined
 }
 
-// Looks the names up one chat at a time, in the background, and redraws when one changed.
+// The desktop app keeps each chat's name, renames included, in a session file of its own,
+// `claude-code-sessions/<account>/<org>/local_<id>.json`: `cliSessionId` names the chat,
+// `title` its name. A chat in a project has its name there alone, none in its transcript.
+// The folder sits in the app's data folder, or one level down (Claude-Data/claude_<id>/).
+const APP_DIRS = ['AppData/Local/Claude-Data', 'AppData/Roaming/Claude', 'Library/Application Support/Claude', '.config/Claude']
+
+// Chat id -> the app's session file for it, as the last scan found them.
+const appFiles = new Map<string, string>()
+let lastScan = 0
+
+const subdirs = async ($: Engine, dir: string) => {
+  try {
+    return (await $.fs.list(dir)).filter(entry => entry.kind === 'dir').map(entry => `${dir}/${entry.name}`)
+  } catch {
+    return []
+  }
+}
+
+const scanAppFiles = async ($: Engine) => {
+  const dir = claudeDir($)
+
+  if (dir === undefined) return
+  const home = dir.slice(0, -'/.claude'.length)
+
+  for (const base of APP_DIRS.map(path => `${home}/${path}`)) {
+    for (const top of [base, ...(await subdirs($, base))]) {
+      for (const account of await subdirs($, `${top}/claude-code-sessions`)) {
+        for (const org of await subdirs($, account)) {
+          let files: string[] = []
+
+          try {
+            files = (await $.fs.list(org)).filter(entry => /^local_.*\.json$/.test(entry.name)).map(entry => `${org}/${entry.name}`)
+          } catch {
+            continue
+          }
+          for (const file of files) {
+            try {
+              const id = (JSON.parse(await $.fs.read(file)) as { cliSessionId?: unknown }).cliSessionId
+
+              if (typeof id === 'string') appFiles.set(id, file)
+            } catch {
+              // Mid-write, or not a session: the next scan reads it again.
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+const appTitle = async ($: Engine, sessionId: string) => {
+  const file = appFiles.get(sessionId)
+
+  if (file === undefined) return undefined
+  try {
+    const title = (JSON.parse(await $.fs.read(file)) as { title?: unknown }).title
+
+    return typeof title === 'string' && title.trim() !== '' ? title.trim() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// Looks the names up one chat at a time, in the background, and redraws when one changed:
+// the app's own name first, then the transcript's.
 const learnTitles = async ($: Engine, ids: string[]) => {
+  // A chat the app keeps no file for (a terminal session) would rescan every turn: once a minute.
+  if (ids.some(id => !appFiles.has(id)) && Date.now() - lastScan > 60_000) {
+    lastScan = Date.now()
+    await scanAppFiles($)
+  }
   for (const id of ids) {
-    const title = await findTitle($, id)
+    const title = (await appTitle($, id)) ?? (await findTitle($, id))
     const titles = await readTitles($)
 
     if (title !== undefined && titles[id] !== title) {
@@ -213,7 +282,8 @@ export const register: Register = on => {
       $.ui.invalidate('ui.render')
 
       const labels = await readLabels($)
-      const text = e.text.replace(/\s+/g, ' ').trim()
+      // File mentions (`@"C:\path"`, `@src/x.ts`) say nothing of the chat: they are left out.
+      const text = e.text.replace(/@"[^"]*"|@\S+/g, ' ').replace(/\s+/g, ' ').trim()
 
       // Skip automated messages (task notifications, hook output): they are not the chat's own prompt.
       if (!labels[sessionId] && text !== '' && !text.startsWith('<')) {
